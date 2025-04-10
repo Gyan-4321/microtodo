@@ -1,0 +1,60 @@
+name: buildandreleasepipeline
+
+trigger:
+- none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  imageTag: '$(Build.BuildId)'  # Using the Build ID as the tag for the Docker image
+
+
+# Build the Docker image and push to ACR
+steps:
+- task: Docker@2
+  inputs:
+    containerRegistry: 'ACRSVC'  # Your ACR service connection
+    repository: 'gyanacr'      # Your ACR repository name
+    command: 'buildAndPush'
+    Dockerfile: '**/Dockerfile'
+    tags: '$(imageTag)'  # Tag the image with the Build ID
+
+
+    # Create a secret in AKS to pull the Docker image from ACR
+#     - task: KubernetesManifest@1
+#       inputs:
+#         action: 'createSecret'
+#         connectionType: 'kubernetesServiceConnection'
+#         kubernetesServiceConnection: 'newtechakssvc'  # Your AKS service connection
+#         secretType: 'dockerRegistry'
+#         secretName: 'gyansecret'  # Secret name to access the ACR
+#         dockerRegistryEndpoint: 'ACRSVC'
+
+# - stage: stage2
+#   dependsOn: stage1
+#   displayName: Deploy to AKS
+#   jobs:
+#   - job: deployjob
+#     displayName: Deploy to AKS
+#     steps:
+    
+#     # Update the image tag in the deployment.yaml file using the Build ID|
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: 'gyannewtech'
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: |
+#           #get aks credential
+#           az aks get-credentials --resource-group test-rg1 --name clusternewtech
+            
+#           #updatetag
+#           echo "Updating image tag in deployment.yaml with tag $(imageTag)"
+#                   sed -i 's|image: .*|image: acrtest25.azurecr.io/myapp:$(imageTag)|' manifests/deployment.yaml
+          
+#           #apply the manifest
+#           kubectl apply -f manifests/deployment.yaml
+#           kubectl apply  -f manifests/service.yaml
+    
+    
