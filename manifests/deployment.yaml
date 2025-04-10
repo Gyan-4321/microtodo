@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todoappui
+  namespace: dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: todoappui
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1              # Allows 1 extra pod above the replica count
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: todoappui
+    spec:
+      serviceAccountName: devsvcacc
+      containers:
+      - name: todoappui
+        image: gyanacr.azurecr.io/gyanacr:218
+        ports:
+        - containerPort: 80

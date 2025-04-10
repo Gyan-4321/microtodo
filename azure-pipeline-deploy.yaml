@@ -1,0 +1,86 @@
+trigger:
+- none
+
+pool:
+  vmImage: ubuntu-latest
+
+parameters:
+- name: environment
+  displayName: "Select Deployment Environment"
+  type: string
+  default: "dev"
+  values:
+    - "dev"
+    - "qe"
+    - "e2e"
+
+- name: acrName
+  displayName: "Select Azure Container Registry (ACR)"
+  type: string
+  default: "gyanacr"
+  values:
+    - "gyanacr"
+    - "e2ecusacr"
+
+- name: imageTag
+  displayName: "Enter Image Tag"
+  type: string
+  default: ""
+
+stages:       
+- stage: deployonaks
+  displayName: Deploy to AKS
+  jobs:
+  - job: deployjob
+    displayName: Deploy to AKS
+    steps:
+    
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'armsvcgyan'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Determine AKS cluster, ACR, namespace, service account, and resource group based on environment
+          if [[ "${{ parameters.environment }}" == "e2e" ]]; then
+            AKS_CLUSTER="phid-test"
+            ACR_NAME="e2ecusacr"
+            SERVICE_ACCOUNT="e2esvcacc"
+            RESOURCE_GROUP="e2ecusrg"
+          elif [[ "${{ parameters.environment }}" == "qe" ]]; then
+            AKS_CLUSTER="phid-nprod"
+            ACR_NAME="devcusacr"
+            SERVICE_ACCOUNT="qesvcacc"
+            RESOURCE_GROUP="dontdelete"
+          else
+            AKS_CLUSTER="gyancluster50"
+            ACR_NAME="gyanacr"
+            SERVICE_ACCOUNT="devsvcacc"
+            RESOURCE_GROUP="dontdelete"
+          fi
+
+          NAMESPACE="${{ parameters.environment }}"
+
+          echo "Using AKS Cluster: $AKS_CLUSTER"
+          echo "Using ACR: $ACR_NAME"
+          echo "Using Resource Group: $RESOURCE_GROUP"
+          echo "Deploying to Namespace: $NAMESPACE"
+          echo "Using Service Account: $SERVICE_ACCOUNT"
+
+          # Get AKS credentials
+          az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER
+          
+          # Ensure namespace exists in AKS
+          kubectl get namespace $NAMESPACE || kubectl create namespace $NAMESPACE
+          
+          # Update image tag dynamically in deployment.yaml
+          echo "Updating image tag in deployment.yaml with ACR: $ACR_NAME and Tag: ${{ parameters.imageTag }}"
+          sed -i 's|image: .*|image: '"$ACR_NAME"'.azurecr.io/gyanacr:${{ parameters.imageTag }}|' manifests/deployment.yaml
+          
+          # Update service account dynamically in deployment.yaml
+          echo "Updating service account in deployment.yaml to $SERVICE_ACCOUNT"
+          sed -i 's|serviceAccountName: .*|serviceAccountName: '"$SERVICE_ACCOUNT"'|' manifests/deployment.yaml
+
+          # Apply the updated manifest in the selected namespace
+          kubectl apply -f manifests/deployment.yaml -n $NAMESPACE
+          kubectl apply -f manifests/service.yaml -n $NAMESPACE
